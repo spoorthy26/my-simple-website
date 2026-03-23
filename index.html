@@ -76,6 +76,10 @@
   .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px; }
   .toolbar-left { display: flex; align-items: center; gap: 8px; font-family: 'Fraunces', serif; font-size: 1.1rem; font-weight: 600; }
   .row-count { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; font-weight: 400; }
+  .filter-tabs { display: flex; gap: 4px; margin-bottom: 1rem; }
+  .ftab { padding: 5px 16px; border-radius: 20px; font-size: 12px; font-family: 'DM Mono', monospace; cursor: pointer; border: 1px solid var(--border-strong); background: transparent; color: var(--muted); transition: all .15s; }
+  .ftab:hover { background: var(--tag-bg); color: var(--text); }
+  .ftab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
 
   .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
   .table-scroll { overflow-x: auto; }
@@ -195,8 +199,8 @@
       </div>
       <div class="full">
         <label class="lbl">Column Order (comma-separated)</label>
-        <input type="text" id="col-map" value="title,image_url,description,product_link" />
-        <p class="hint">Map your sheet columns in order. Use a blank comma to skip a column. Example for your sheet (cols A-K): <code style="background:var(--tag-bg);padding:1px 5px;border-radius:3px;font-size:11px;">,,,,,,product_link,,image_url,title,description</code></p>
+        <input type="text" id="col-map" value="title,image_url,description,product_link,posted_status" />
+        <p class="hint">Map your sheet columns in order. Use a blank comma to skip. The last field must be <strong>posted_status</strong> — the column whose value is <code style="background:var(--tag-bg);padding:1px 5px;border-radius:3px;font-size:11px;">true</code> when already posted.</p>
       </div>
 
       <div class="full" style="background:var(--tag-bg);border-radius:var(--radius-sm);padding:10px 14px;margin-top:4px;">
@@ -217,15 +221,20 @@
     </div>
   </div>
 
-    <!-- TABLE TOOLBAR -->
+  <!-- TABLE TOOLBAR -->
   <div class="toolbar">
     <div class="toolbar-left">
       Pins <span class="row-count" id="row-count"></span>
     </div>
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;gap:8px;align-items:center;">
       <button class="btn btn-outline btn-sm" onclick="loadSheet()">↻ Refresh</button>
       <button class="btn btn-red btn-sm" onclick="postSelected()">Post selected →</button>
     </div>
+  </div>
+  <div class="filter-tabs">
+    <button class="ftab active" data-filter="pending" onclick="setFilter('pending',this)">Pending</button>
+    <button class="ftab" data-filter="posted" onclick="setFilter('posted',this)">Posted</button>
+    <button class="ftab" data-filter="all" onclick="setFilter('all',this)">All</button>
   </div>
 
   <!-- TABLE -->
@@ -293,7 +302,7 @@
 </footer>
 
 <script>
-let rows = [], statusMap = {};
+let rows = [], statusMap = {}, activeFilter = 'pending';
 
 // ── CONFIG ────────────────────────────────────────────────────────────
 const LKEYS = ['google-api-key','sheet-id','sheet-range','col-map','has-header','n8n-webhook'];
@@ -342,39 +351,75 @@ async function loadSheet() {
     if (hasHdr && vals.length) vals = vals.slice(1);
     rows = vals.map((row, i) => {
       const obj = { _idx: i };
-      colMap.forEach((f, ci) => { if (f) obj[f] = row[ci] || ''; });
+      colMap.forEach((f, ci) => { if (f) obj[f] = (row[ci] || '').trim(); });
+      // Derive status from posted_status column
+      const ps = (obj.posted_status || '').toLowerCase();
+      obj._status = (ps === 'true' || ps === 'yes' || ps === '1') ? 'done' : 'pending';
       return obj;
     }).filter(r => r.title || r.image_url);
     statusMap = {};
     renderTable();
     const b = document.getElementById('sheet-badge');
     b.textContent = rows.length + ' rows loaded'; b.className = 'badge badge-ok';
-    document.getElementById('row-count').textContent = '(' + rows.length + ')';
+    document.getElementById('row-count').textContent = '(' + rows.filter((_,i)=>getStatus(i)==='pending').length + ' pending)';
     toast('Loaded ' + rows.length + ' rows from Google Sheets', 'success');
     document.getElementById('config-card').style.display = 'none';
   } catch(e) { toast('Error: ' + e.message, 'error'); setError(e.message); }
 }
 
 // ── RENDER TABLE ──────────────────────────────────────────────────────
+function getStatus(i) {
+  return statusMap[i] || rows[i]._status || 'pending';
+}
+
+function setFilter(f, el) {
+  activeFilter = f;
+  document.querySelectorAll('.ftab').forEach(b => b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  renderTable();
+}
+
 function renderTable() {
   const tb = document.getElementById('tbody');
   if (!rows.length) { tb.innerHTML = '<tr><td colspan="7"><div class="state-box"><p>No data found in the specified range.</p></div></td></tr>'; return; }
-  tb.innerHTML = rows.map((r, i) => {
-    const s = statusMap[i] || 'pending';
+
+  const filtered = rows.filter((r, i) => {
+    const s = getStatus(i);
+    if (activeFilter === 'pending') return s === 'pending' || s === 'error';
+    if (activeFilter === 'posted')  return s === 'done';
+    return true;
+  });
+
+  // Update row count to show filtered count
+  document.getElementById('row-count').textContent = '(' + filtered.length + ' of ' + rows.length + ')';
+
+  if (!filtered.length) {
+    const labels = {pending:'No pending pins', posted:'No posted pins', all:'No rows found'};
+    tb.innerHTML = `<tr><td colspan="7"><div class="state-box"><p>${labels[activeFilter]||'No rows'}</p></div></td></tr>`;
+    return;
+  }
+
+  tb.innerHTML = filtered.map((r) => {
+    const i = r._idx;
+    const s = getStatus(i);
+    const isPosted = s === 'done';
+    const isQueued = s === 'queued';
     const img = r.image_url
-      ? `<img class="img-thumb" src="${h(r.image_url)}" alt="" onerror="this.outerHTML='<div class=img-ph>🖼</div>'" />`
-      : '<div class="img-ph">🖼</div>';
+      ? `<img class="img-thumb" src="${h(r.image_url)}" alt="" onerror="this.outerHTML='<div class=img-ph>&#128444;</div>'" />`
+      : '<div class="img-ph">&#128444;</div>';
     const link = r.product_link
       ? `<a href="${h(r.product_link)}" target="_blank" rel="noopener" style="color:#1a6fc4;text-decoration:none;font-size:11.5px;">${trunc(r.product_link,26)}</a>`
       : '<span style="color:var(--muted)">—</span>';
+    const btnDisabled = isPosted || isQueued;
+    const btnLabel = isQueued ? '…' : isPosted ? 'Posted' : 'Post →';
     return `<tr>
-      <td><input type="checkbox" class="rcb" data-i="${i}" onchange="updateBulk()" /></td>
+      <td><input type="checkbox" class="rcb" data-i="${i}" onchange="updateBulk()" ${isPosted?'disabled':''} /></td>
       <td style="cursor:pointer" onclick="openModal(${i})">${img}</td>
       <td style="cursor:pointer;font-weight:500" onclick="openModal(${i})">${h(trunc(r.title||'',38))}</td>
       <td><span class="pill pill-${s}" id="pill-${i}">${slabel(s)}</span></td>
       <td style="color:var(--muted)">${h(trunc(r.description||'',55))}</td>
       <td>${link}</td>
-      <td><button class="btn btn-red btn-sm" id="btn-${i}" onclick="postPin(${i})" ${s==='queued'?'disabled':''}>${s==='queued'?'…':'Post →'}</button></td>
+      <td><button class="btn ${isPosted?'btn-outline':'btn-red'} btn-sm" id="btn-${i}" onclick="${btnDisabled?'':'postPin('+i+')'}" ${btnDisabled?'disabled':''}>${btnLabel}</button></td>
     </tr>`;
   }).join('');
 }
@@ -426,15 +471,26 @@ function setRowStatus(idx, s) {
   const p = document.getElementById('pill-' + idx);
   const b = document.getElementById('btn-' + idx);
   if (p) { p.className = 'pill pill-' + s; p.textContent = slabel(s); }
-  if (b) { b.textContent = s==='queued'?'…':'Post →'; b.disabled = s==='queued'; }
+  if (b) {
+    const isPosted = s === 'done';
+    const isQueued = s === 'queued';
+    b.textContent = isQueued ? '…' : isPosted ? 'Posted' : 'Post →';
+    b.disabled = isPosted || isQueued;
+    b.className = 'btn ' + (isPosted ? 'btn-outline' : 'btn-red') + ' btn-sm';
+    b.onclick = (isPosted || isQueued) ? null : () => postPin(idx);
+    // If filter is active and row just got posted, re-render after short delay
+    if (isPosted && activeFilter === 'pending') {
+      setTimeout(() => renderTable(), 800);
+    }
+  }
 }
 function slabel(s) { return {pending:'pending',queued:'posting…',done:'posted ✓',error:'error ✕'}[s]||s; }
 
 // ── BULK ──────────────────────────────────────────────────────────────
 function getSelected() { return [...document.querySelectorAll('.rcb:checked')].map(c=>+c.dataset.i); }
 async function postSelected() {
-  const idxs = getSelected();
-  if (!idxs.length) { toast('Select at least one row', 'error'); return; }
+  const idxs = getSelected().filter(i => getStatus(i) !== 'done');
+  if (!idxs.length) { toast('No pending rows selected', 'error'); return; }
   for (const i of idxs) { await postPin(i); await delay(400); }
   clearSel();
 }
