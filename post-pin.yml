@@ -1,0 +1,52 @@
+name: Post Pinterest Pin
+
+on:
+  workflow_dispatch:
+    inputs:
+      title:
+        description: "Pin title"
+        required: true
+      image_url:
+        description: "Image URL"
+        required: true
+      description:
+        description: "Pin description"
+        required: false
+        default: ""
+      product_link:
+        description: "Product / destination link"
+        required: false
+        default: ""
+
+jobs:
+  post-pin:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post pin to Pinterest automation endpoint
+        env:
+          PINTEREST_ENDPOINT: ${{ secrets.PINTEREST_ENDPOINT }}
+        run: |
+          echo "Posting pin: ${{ inputs.title }}"
+
+          PAYLOAD=$(printf '%s' '{
+            "title":        "${{ inputs.title }}",
+            "image_url":    "${{ inputs.image_url }}",
+            "description":  "${{ inputs.description }}",
+            "product_link": "${{ inputs.product_link }}"
+          }')
+
+          HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            -X POST "$PINTEREST_ENDPOINT" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+
+          echo "HTTP status: $HTTP_STATUS"
+          echo "Response:"
+          cat /tmp/response.json
+
+          if [ "$HTTP_STATUS" -lt 200 ] || [ "$HTTP_STATUS" -ge 300 ]; then
+            echo "::error::Pinterest endpoint returned HTTP $HTTP_STATUS"
+            exit 1
+          fi
+
+          echo "Pin posted successfully!"
