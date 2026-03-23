@@ -132,7 +132,6 @@
   footer a { color: var(--muted); text-decoration: none; margin: 0 8px; }
   footer a:hover { color: var(--text); }
 
-  /* first-run banner */
   #first-run {
     background: var(--red-pale); border: 1px solid #f5c4c4;
     border-radius: var(--radius); padding: 1rem 1.5rem;
@@ -157,9 +156,9 @@
 
 <main>
 
-  <!-- FIRST-RUN HINT (hidden after config saved) -->
+  <!-- FIRST-RUN HINT -->
   <div id="first-run">
-    <p><strong>First time?</strong> Click <strong>⚙ settings</strong> to enter your GitHub PAT, Google Sheets API key, and Sheet ID. All values are stored only in your browser — never in the repo.</p>
+    <p><strong>First time?</strong> Click <strong>⚙ settings</strong> to enter your Google Sheets API key, Sheet ID, and n8n webhook URL. All values are stored only in your browser — never in the repo.</p>
     <button class="btn btn-red btn-sm" onclick="toggle('config-card');hide('first-run')">Open settings →</button>
   </div>
 
@@ -167,6 +166,11 @@
   <div id="config-card" class="card" style="display:none;">
     <h2>Settings</h2>
     <div class="grid2">
+
+      <div class="full" style="background:var(--tag-bg);border-radius:var(--radius-sm);padding:10px 14px;">
+        <p style="font-size:12px;color:var(--muted);">Google Sheets — connect your product database</p>
+      </div>
+
       <div>
         <label class="lbl">Google Sheets API Key</label>
         <input type="password" id="google-api-key" placeholder="AIza..." />
@@ -174,12 +178,13 @@
       </div>
       <div>
         <label class="lbl">Spreadsheet ID</label>
-        <input type="text" id="sheet-id" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" />
-        <p class="hint">From your Google Sheet URL.</p>
+        <input type="text" id="sheet-id" placeholder="1JAQewZ0XwKg-Yf2Lcwm..." />
+        <p class="hint">The long ID from your Google Sheet URL.</p>
       </div>
       <div>
         <label class="lbl">Sheet Range</label>
-        <input type="text" id="sheet-range" value="Sheet1!A:E" />
+        <input type="text" id="sheet-range" value="Sheet1!A:L" />
+        <p class="hint">e.g. Sheet1!A:L — extend to cover all your columns.</p>
       </div>
       <div>
         <label class="lbl">Has Header Row?</label>
@@ -191,19 +196,19 @@
       <div class="full">
         <label class="lbl">Column Order (comma-separated)</label>
         <input type="text" id="col-map" value="title,image_url,description,product_link" />
-        <p class="hint">Match the order of columns A, B, C, D in your sheet.</p>
+        <p class="hint">Map your sheet columns in order. Use a blank comma to skip a column. Example for your sheet (cols A-K): <code style="background:var(--tag-bg);padding:1px 5px;border-radius:3px;font-size:11px;">,,,,,,product_link,,image_url,title,description</code></p>
       </div>
-      <div class="full" style="border-top:1px solid var(--border);padding-top:1rem;margin-top:4px;">
-        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">The settings below are used to trigger the GitHub Actions workflow that posts to Pinterest. Your Pinterest endpoint URL stays in GitHub Secrets — never here.</p>
+
+      <div class="full" style="background:var(--tag-bg);border-radius:var(--radius-sm);padding:10px 14px;margin-top:4px;">
+        <p style="font-size:12px;color:var(--muted);">n8n Webhook — triggers your Pinterest automation</p>
       </div>
-      <div>
-        <label class="lbl">GitHub Personal Access Token (PAT)</label>
-        <input type="password" id="gh-pat" placeholder="github_pat_..." />
-        <p class="hint">Needs <strong>Actions: Read & Write</strong> on this repo.</p>
+
+      <div class="full">
+        <label class="lbl">n8n Webhook URL</label>
+        <input type="text" id="n8n-webhook" placeholder="https://n8n.srv1474936.hstgr.cloud/webhook/..." />
+        <p class="hint">From your n8n Webhook node — copy the Production URL. The dashboard POSTs pin data directly to this URL when you click Post.</p>
       </div>
-      <div style="display:flex;flex-direction:column;justify-content:center;">
-        <p style="font-size:12px;color:var(--muted);">Repo is fixed to:<br/><strong>spoorthy26 / my-simple-website</strong></p>
-      </div>
+
       <div class="full" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
         <button class="btn btn-red" onclick="loadSheet()">Connect &amp; Load Sheet</button>
         <button class="btn btn-outline" onclick="saveConfig()">Save settings</button>
@@ -212,7 +217,7 @@
     </div>
   </div>
 
-  <!-- TABLE TOOLBAR -->
+    <!-- TABLE TOOLBAR -->
   <div class="toolbar">
     <div class="toolbar-left">
       Pins <span class="row-count" id="row-count"></span>
@@ -288,20 +293,16 @@
 </footer>
 
 <script>
-// ── CONSTANTS ─────────────────────────────────────────────────────────
-const GH_OWNER = 'spoorthy26';
-const GH_REPO  = 'my-simple-website';
-const WORKFLOW = 'post-pin.yml';
-
 let rows = [], statusMap = {};
 
 // ── CONFIG ────────────────────────────────────────────────────────────
-const LKEYS = ['google-api-key','sheet-id','sheet-range','col-map','has-header','gh-pat'];
+const LKEYS = ['google-api-key','sheet-id','sheet-range','col-map','has-header','n8n-webhook'];
 function saveConfig() {
   LKEYS.forEach(k => {
     const el = document.getElementById(k);
     if (el) localStorage.setItem('psc_' + k, el.value);
   });
+  hide('first-run');
   hide('first-run');
   toast('Settings saved', 'success');
 }
@@ -311,7 +312,7 @@ function loadConfig() {
     const el = document.getElementById(k);
     if (v && el) el.value = v;
   });
-  if (localStorage.getItem('psc_gh-pat')) hide('first-run');
+  if (localStorage.getItem('psc_n8n-webhook')) hide('first-run');
 }
 function cfg(k) { return (document.getElementById(k)||{}).value?.trim() || ''; }
 function toggle(id) { const el = document.getElementById(id); el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
@@ -380,40 +381,39 @@ function renderTable() {
 function setLoading() { document.getElementById('tbody').innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="spinner"></div><p>Loading from Google Sheets…</p></div></td></tr>'; }
 function setError(m) { document.getElementById('tbody').innerHTML = `<tr><td colspan="7"><div class="state-box"><p style="color:var(--red-dark)">⚠ ${m}</p></div></td></tr>`; }
 
-// ── POST PIN via GitHub Actions ───────────────────────────────────────
+// ── POST PIN via n8n Webhook ──────────────────────────────────────────
 async function postPin(idx) {
-  const pat = cfg('gh-pat') || localStorage.getItem('psc_gh-pat');
-  if (!pat) { toast('Add your GitHub PAT in settings', 'error'); document.getElementById('config-card').style.display='block'; return; }
+  const webhookUrl = cfg('n8n-webhook') || localStorage.getItem('psc_n8n-webhook');
+  if (!webhookUrl) {
+    toast('Add your n8n Webhook URL in settings', 'error');
+    document.getElementById('config-card').style.display = 'block';
+    return;
+  }
 
   const r = rows[idx];
   setRowStatus(idx, 'queued');
-  toast('Dispatching: ' + trunc(r.title||'pin', 28), 'info');
+  toast('Sending to n8n: ' + trunc(r.title||'pin', 28), 'info');
+
+  const payload = {
+    title:        r.title        || '',
+    image_url:    r.image_url    || '',
+    description:  r.description  || '',
+    product_link: r.product_link || ''
+  };
 
   try {
-    const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
+    const res = await fetch(webhookUrl, {
       method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + pat,
-        'Accept': 'application/vnd.github+json',
-        'Content-Type': 'application/json',
-        'X-GitHub-Api-Version': '2022-11-28'
-      },
-      body: JSON.stringify({
-        ref: 'main',
-        inputs: {
-          title:        r.title        || '',
-          image_url:    r.image_url    || '',
-          description:  r.description  || '',
-          product_link: r.product_link || ''
-        }
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
-    if (res.status === 204) {
+    if (res.ok) {
       setRowStatus(idx, 'done');
-      toast('Posted ✓ — check GitHub Actions for details', 'success');
+      toast('Posted to Pinterest ✓', 'success');
     } else {
-      const e = await res.json();
-      throw new Error(e.message || 'GitHub API error ' + res.status);
+      let msg = 'HTTP ' + res.status;
+      try { const e = await res.json(); msg = e.message || msg; } catch(_) {}
+      throw new Error(msg);
     }
   } catch(e) {
     setRowStatus(idx, 'error');
@@ -428,7 +428,7 @@ function setRowStatus(idx, s) {
   if (p) { p.className = 'pill pill-' + s; p.textContent = slabel(s); }
   if (b) { b.textContent = s==='queued'?'…':'Post →'; b.disabled = s==='queued'; }
 }
-function slabel(s) { return {pending:'pending',queued:'queued…',done:'dispatched ✓',error:'error ✕'}[s]||s; }
+function slabel(s) { return {pending:'pending',queued:'posting…',done:'posted ✓',error:'error ✕'}[s]||s; }
 
 // ── BULK ──────────────────────────────────────────────────────────────
 function getSelected() { return [...document.querySelectorAll('.rcb:checked')].map(c=>+c.dataset.i); }
