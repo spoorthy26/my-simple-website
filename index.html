@@ -1,20 +1,482 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>My Website</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Website — Pinterest Pin Scheduler</title>
 <link rel="icon" type="image/png" href="logo.png">
-</head>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,600;1,9..144,300&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --red: #E60023; --red-dark: #ad081b; --red-pale: #fff0f1;
+    --bg: #fafaf9; --surface: #ffffff; --border: #e8e5e0;
+    --border-strong: #ccc8c0; --text: #1a1714; --muted: #7a7570;
+    --tag-bg: #f3f0eb; --success: #1e7e34; --success-bg: #eafaf0;
+    --warning: #8a5c00; --warning-bg: #fff8e6;
+    --radius: 10px; --radius-sm: 6px;
+  }
+  body { font-family: 'DM Mono', monospace; background: var(--bg); color: var(--text); min-height: 100vh; }
 
+  nav {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 0 2rem; height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .nav-brand {
+    display: flex; align-items: center; gap: 10px;
+    font-family: 'Fraunces', serif; font-size: 1.2rem; font-weight: 600;
+    color: var(--text); text-decoration: none;
+  }
+  .p-icon {
+    width: 28px; height: 28px; background: var(--red); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 14px;
+  }
+  .nav-links { display: flex; align-items: center; gap: 16px; }
+  .nav-links a { font-size: 12px; color: var(--muted); text-decoration: none; }
+  .nav-links a:hover { color: var(--text); }
+  .nav-right { display: flex; align-items: center; gap: 10px; }
+  .badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-family: 'DM Mono', monospace; }
+  .badge-ok { background: var(--success-bg); color: var(--success); }
+  .badge-no { background: var(--red-pale); color: var(--red-dark); }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 2rem 2rem 5rem; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.5rem; margin-bottom: 1.5rem; }
+  .card h2 { font-family: 'Fraunces', serif; font-size: 1rem; font-weight: 600; margin-bottom: 1rem; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .full { grid-column: 1 / -1; }
+  @media(max-width:600px){ .grid2 { grid-template-columns: 1fr; } }
+
+  label.lbl { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+  input[type=text], input[type=password], select {
+    width: 100%; border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    padding: 0 12px; font-family: 'DM Mono', monospace; font-size: 12.5px;
+    color: var(--text); background: var(--bg); outline: none; transition: border-color .15s; height: 38px;
+  }
+  input:focus, select:focus { border-color: var(--red); background: var(--surface); }
+  .hint { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 0 16px; height: 38px; border-radius: var(--radius-sm);
+    font-family: 'DM Mono', monospace; font-size: 12.5px;
+    cursor: pointer; border: none; transition: background .15s, transform .1s;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-red { background: var(--red); color: white; }
+  .btn-red:hover { background: var(--red-dark); }
+  .btn-outline { background: transparent; border: 1px solid var(--border-strong); color: var(--text); }
+  .btn-outline:hover { background: var(--tag-bg); }
+  .btn-sm { height: 30px; padding: 0 12px; font-size: 11.5px; }
+  .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1rem; flex-wrap: wrap; gap: 10px; }
+  .toolbar-left { display: flex; align-items: center; gap: 8px; font-family: 'Fraunces', serif; font-size: 1.1rem; font-weight: 600; }
+  .row-count { font-size: 12px; color: var(--muted); font-family: 'DM Mono', monospace; font-weight: 400; }
+
+  .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+  thead { background: var(--tag-bg); }
+  th {
+    text-align: left; padding: 10px 14px; font-size: 10.5px;
+    letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted);
+    font-weight: 500; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  th:nth-child(1){width:40px} th:nth-child(2){width:76px} th:nth-child(3){width:22%}
+  th:nth-child(4){width:95px} th:nth-child(5){width:26%} th:nth-child(6){width:17%} th:nth-child(7){width:105px}
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #fbf9f7; }
+
+  .pill { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 20px; font-size: 11px; white-space: nowrap; }
+  .pill-pending { background: var(--tag-bg); color: var(--muted); }
+  .pill-queued  { background: var(--warning-bg); color: var(--warning); }
+  .pill-done    { background: var(--success-bg); color: var(--success); }
+  .pill-error   { background: var(--red-pale); color: var(--red-dark); }
+
+  .img-thumb { width: 42px; height: 42px; border-radius: 5px; object-fit: cover; display: block; border: 1px solid var(--border); background: var(--tag-bg); }
+  .img-ph { width: 42px; height: 42px; border-radius: 5px; background: var(--tag-bg); border: 1px solid var(--border); display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--muted); }
+
+  .state-box { padding: 3rem 2rem; text-align: center; color: var(--muted); }
+  .state-box p { font-size: 13px; margin-top: 6px; }
+  .spinner { width: 20px; height: 20px; border: 2px solid var(--border); border-top-color: var(--red); border-radius: 50%; animation: spin .7s linear infinite; margin: 0 auto 8px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  #toast-container { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+  .toast { background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: var(--radius-sm); font-size: 12.5px; max-width: 320px; animation: fadeUp .2s ease; }
+  .toast-success { background: var(--success); }
+  .toast-error   { background: var(--red-dark); }
+  .toast-info    { background: #185FA5; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+  #bulk-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--text); color: white; padding: 12px 2rem; display: none; align-items: center; justify-content: space-between; font-size: 13px; z-index: 200; }
+  #bulk-bar.on { display: flex; }
+
+  #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 300; align-items: center; justify-content: center; padding: 1rem; }
+  #modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border-radius: var(--radius); padding: 1.5rem; max-width: 500px; width: 100%; max-height: 80vh; overflow-y: auto; }
+  .modal-hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+  .modal-title { font-family: 'Fraunces', serif; font-size: 1rem; font-weight: 600; }
+  .modal-close { background: none; border: none; cursor: pointer; font-size: 18px; color: var(--muted); }
+  .modal-img { width: 100%; max-height: 220px; object-fit: cover; border-radius: var(--radius-sm); margin-bottom: 1rem; }
+  .mf { margin-bottom: 12px; }
+  .mf label { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 4px; }
+  .mf p { font-size: 13px; word-break: break-word; white-space: pre-wrap; }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+
+  footer { text-align: center; padding: 2rem; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--border); }
+  footer a { color: var(--muted); text-decoration: none; margin: 0 8px; }
+  footer a:hover { color: var(--text); }
+
+  /* first-run banner */
+  #first-run {
+    background: var(--red-pale); border: 1px solid #f5c4c4;
+    border-radius: var(--radius); padding: 1rem 1.5rem;
+    margin-bottom: 1.5rem; display: flex; align-items: center; gap: 12px;
+  }
+  #first-run p { font-size: 12.5px; color: var(--red-dark); flex: 1; }
+  #first-run strong { font-weight: 500; }
+</style>
+</head>
 <body>
 
-<h1>Welcome to My Website</h1>
+<nav>
+  <a class="nav-brand" href="#">
+    <div class="p-icon">P</div>
+    Pin Scheduler
+  </a>
+  <div class="nav-right">
+    <span id="sheet-badge" class="badge badge-no">not connected</span>
+    <button class="btn btn-outline btn-sm" onclick="toggle('config-card')">⚙ settings</button>
+  </div>
+</nav>
 
-<p>This application is used to automatically publish Pinterest Pins from a product database. 
-The tool helps schedule affiliate product posts with images, descriptions, and links. 
-It is used for content automation and marketing workflow management.</p>
+<main>
 
-<a href="privacy.html">Privacy Policy</a><br>
-<a href="terms.html">Terms & Conditions</a>
+  <!-- FIRST-RUN HINT (hidden after config saved) -->
+  <div id="first-run">
+    <p><strong>First time?</strong> Click <strong>⚙ settings</strong> to enter your GitHub PAT, Google Sheets API key, and Sheet ID. All values are stored only in your browser — never in the repo.</p>
+    <button class="btn btn-red btn-sm" onclick="toggle('config-card');hide('first-run')">Open settings →</button>
+  </div>
 
+  <!-- CONFIG -->
+  <div id="config-card" class="card" style="display:none;">
+    <h2>Settings</h2>
+    <div class="grid2">
+      <div>
+        <label class="lbl">Google Sheets API Key</label>
+        <input type="password" id="google-api-key" placeholder="AIza..." />
+        <p class="hint">Stored in your browser only. Never committed to git.</p>
+      </div>
+      <div>
+        <label class="lbl">Spreadsheet ID</label>
+        <input type="text" id="sheet-id" placeholder="1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgVE2upms" />
+        <p class="hint">From your Google Sheet URL.</p>
+      </div>
+      <div>
+        <label class="lbl">Sheet Range</label>
+        <input type="text" id="sheet-range" value="Sheet1!A:E" />
+      </div>
+      <div>
+        <label class="lbl">Has Header Row?</label>
+        <select id="has-header">
+          <option value="yes">Yes — first row is headers</option>
+          <option value="no">No header row</option>
+        </select>
+      </div>
+      <div class="full">
+        <label class="lbl">Column Order (comma-separated)</label>
+        <input type="text" id="col-map" value="title,image_url,description,product_link" />
+        <p class="hint">Match the order of columns A, B, C, D in your sheet.</p>
+      </div>
+      <div class="full" style="border-top:1px solid var(--border);padding-top:1rem;margin-top:4px;">
+        <p style="font-size:12px;color:var(--muted);margin-bottom:10px;">The settings below are used to trigger the GitHub Actions workflow that posts to Pinterest. Your Pinterest endpoint URL stays in GitHub Secrets — never here.</p>
+      </div>
+      <div>
+        <label class="lbl">GitHub Personal Access Token (PAT)</label>
+        <input type="password" id="gh-pat" placeholder="github_pat_..." />
+        <p class="hint">Needs <strong>Actions: Read & Write</strong> on this repo.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:center;">
+        <p style="font-size:12px;color:var(--muted);">Repo is fixed to:<br/><strong>spoorthy26 / my-simple-website</strong></p>
+      </div>
+      <div class="full" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        <button class="btn btn-red" onclick="loadSheet()">Connect &amp; Load Sheet</button>
+        <button class="btn btn-outline" onclick="saveConfig()">Save settings</button>
+        <button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="toggle('config-card')">Collapse</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABLE TOOLBAR -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      Pins <span class="row-count" id="row-count"></span>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-outline btn-sm" onclick="loadSheet()">↻ Refresh</button>
+      <button class="btn btn-red btn-sm" onclick="postSelected()">Post selected →</button>
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="sel-all" onchange="toggleAll(this)" /></th>
+            <th>Image</th>
+            <th>Title</th>
+            <th>Status</th>
+            <th>Description</th>
+            <th>Product link</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr><td colspan="7">
+            <div class="state-box">
+              <p>Click <strong>⚙ settings</strong> to connect your Google Sheet</p>
+            </div>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</main>
+
+<!-- BULK BAR -->
+<div id="bulk-bar">
+  <span id="bulk-txt">0 rows selected</span>
+  <div style="display:flex;gap:8px;">
+    <button class="btn btn-outline btn-sm" style="color:white;border-color:rgba(255,255,255,0.3);" onclick="clearSel()">Deselect all</button>
+    <button class="btn btn-red btn-sm" onclick="postSelected()">Post selected to Pinterest →</button>
+  </div>
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay" onclick="closeModalBg(event)">
+  <div class="modal">
+    <div class="modal-hdr">
+      <span class="modal-title" id="m-title">Pin details</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <img id="m-img" class="modal-img" src="" alt="" onerror="this.style.display='none'" />
+    <div class="mf"><label>Title</label><p id="m-t"></p></div>
+    <div class="mf"><label>Description</label><p id="m-d"></p></div>
+    <div class="mf"><label>Product link</label><p id="m-l"></p></div>
+    <div class="mf"><label>Image URL</label><p id="m-u" style="font-size:11px;word-break:break-all;"></p></div>
+    <hr class="divider" />
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-red" id="m-post">Post this pin →</button>
+      <button class="btn btn-outline" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<footer>
+  <a href="privacy.html">Privacy Policy</a>
+  <a href="terms.html">Terms &amp; Conditions</a>
+</footer>
+
+<script>
+// ── CONSTANTS ─────────────────────────────────────────────────────────
+const GH_OWNER = 'spoorthy26';
+const GH_REPO  = 'my-simple-website';
+const WORKFLOW = 'post-pin.yml';
+
+let rows = [], statusMap = {};
+
+// ── CONFIG ────────────────────────────────────────────────────────────
+const LKEYS = ['google-api-key','sheet-id','sheet-range','col-map','has-header','gh-pat'];
+function saveConfig() {
+  LKEYS.forEach(k => {
+    const el = document.getElementById(k);
+    if (el) localStorage.setItem('psc_' + k, el.value);
+  });
+  hide('first-run');
+  toast('Settings saved', 'success');
+}
+function loadConfig() {
+  LKEYS.forEach(k => {
+    const v = localStorage.getItem('psc_' + k);
+    const el = document.getElementById(k);
+    if (v && el) el.value = v;
+  });
+  if (localStorage.getItem('psc_gh-pat')) hide('first-run');
+}
+function cfg(k) { return (document.getElementById(k)||{}).value?.trim() || ''; }
+function toggle(id) { const el = document.getElementById(id); el.style.display = el.style.display === 'none' ? 'block' : 'none'; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+// ── LOAD SHEET ────────────────────────────────────────────────────────
+async function loadSheet() {
+  const apiKey  = cfg('google-api-key')  || localStorage.getItem('psc_google-api-key');
+  const sheetId = cfg('sheet-id')        || localStorage.getItem('psc_sheet-id');
+  const range   = cfg('sheet-range')     || 'Sheet1!A:E';
+  const hasHdr  = cfg('has-header')      === 'yes';
+  const colMap  = cfg('col-map').split(',').map(s => s.trim().toLowerCase().replace(/\s/g,'_'));
+
+  if (!apiKey || !sheetId) {
+    toast('Enter your Google API Key and Sheet ID in settings', 'error');
+    document.getElementById('config-card').style.display = 'block';
+    return;
+  }
+
+  setLoading();
+  try {
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?key=${apiKey}`;
+    const res = await fetch(url);
+    if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || 'Sheets API error'); }
+    const data = await res.json();
+    let vals = data.values || [];
+    if (hasHdr && vals.length) vals = vals.slice(1);
+    rows = vals.map((row, i) => {
+      const obj = { _idx: i };
+      colMap.forEach((f, ci) => { if (f) obj[f] = row[ci] || ''; });
+      return obj;
+    }).filter(r => r.title || r.image_url);
+    statusMap = {};
+    renderTable();
+    const b = document.getElementById('sheet-badge');
+    b.textContent = rows.length + ' rows loaded'; b.className = 'badge badge-ok';
+    document.getElementById('row-count').textContent = '(' + rows.length + ')';
+    toast('Loaded ' + rows.length + ' rows from Google Sheets', 'success');
+    document.getElementById('config-card').style.display = 'none';
+  } catch(e) { toast('Error: ' + e.message, 'error'); setError(e.message); }
+}
+
+// ── RENDER TABLE ──────────────────────────────────────────────────────
+function renderTable() {
+  const tb = document.getElementById('tbody');
+  if (!rows.length) { tb.innerHTML = '<tr><td colspan="7"><div class="state-box"><p>No data found in the specified range.</p></div></td></tr>'; return; }
+  tb.innerHTML = rows.map((r, i) => {
+    const s = statusMap[i] || 'pending';
+    const img = r.image_url
+      ? `<img class="img-thumb" src="${h(r.image_url)}" alt="" onerror="this.outerHTML='<div class=img-ph>🖼</div>'" />`
+      : '<div class="img-ph">🖼</div>';
+    const link = r.product_link
+      ? `<a href="${h(r.product_link)}" target="_blank" rel="noopener" style="color:#1a6fc4;text-decoration:none;font-size:11.5px;">${trunc(r.product_link,26)}</a>`
+      : '<span style="color:var(--muted)">—</span>';
+    return `<tr>
+      <td><input type="checkbox" class="rcb" data-i="${i}" onchange="updateBulk()" /></td>
+      <td style="cursor:pointer" onclick="openModal(${i})">${img}</td>
+      <td style="cursor:pointer;font-weight:500" onclick="openModal(${i})">${h(trunc(r.title||'',38))}</td>
+      <td><span class="pill pill-${s}" id="pill-${i}">${slabel(s)}</span></td>
+      <td style="color:var(--muted)">${h(trunc(r.description||'',55))}</td>
+      <td>${link}</td>
+      <td><button class="btn btn-red btn-sm" id="btn-${i}" onclick="postPin(${i})" ${s==='queued'?'disabled':''}>${s==='queued'?'…':'Post →'}</button></td>
+    </tr>`;
+  }).join('');
+}
+function setLoading() { document.getElementById('tbody').innerHTML = '<tr><td colspan="7"><div class="state-box"><div class="spinner"></div><p>Loading from Google Sheets…</p></div></td></tr>'; }
+function setError(m) { document.getElementById('tbody').innerHTML = `<tr><td colspan="7"><div class="state-box"><p style="color:var(--red-dark)">⚠ ${m}</p></div></td></tr>`; }
+
+// ── POST PIN via GitHub Actions ───────────────────────────────────────
+async function postPin(idx) {
+  const pat = cfg('gh-pat') || localStorage.getItem('psc_gh-pat');
+  if (!pat) { toast('Add your GitHub PAT in settings', 'error'); document.getElementById('config-card').style.display='block'; return; }
+
+  const r = rows[idx];
+  setRowStatus(idx, 'queued');
+  toast('Dispatching: ' + trunc(r.title||'pin', 28), 'info');
+
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GH_OWNER}/${GH_REPO}/actions/workflows/${WORKFLOW}/dispatches`, {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + pat,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': '2022-11-28'
+      },
+      body: JSON.stringify({
+        ref: 'main',
+        inputs: {
+          title:        r.title        || '',
+          image_url:    r.image_url    || '',
+          description:  r.description  || '',
+          product_link: r.product_link || ''
+        }
+      })
+    });
+    if (res.status === 204) {
+      setRowStatus(idx, 'done');
+      toast('Posted ✓ — check GitHub Actions for details', 'success');
+    } else {
+      const e = await res.json();
+      throw new Error(e.message || 'GitHub API error ' + res.status);
+    }
+  } catch(e) {
+    setRowStatus(idx, 'error');
+    toast('Failed: ' + e.message, 'error');
+  }
+}
+
+function setRowStatus(idx, s) {
+  statusMap[idx] = s;
+  const p = document.getElementById('pill-' + idx);
+  const b = document.getElementById('btn-' + idx);
+  if (p) { p.className = 'pill pill-' + s; p.textContent = slabel(s); }
+  if (b) { b.textContent = s==='queued'?'…':'Post →'; b.disabled = s==='queued'; }
+}
+function slabel(s) { return {pending:'pending',queued:'queued…',done:'dispatched ✓',error:'error ✕'}[s]||s; }
+
+// ── BULK ──────────────────────────────────────────────────────────────
+function getSelected() { return [...document.querySelectorAll('.rcb:checked')].map(c=>+c.dataset.i); }
+async function postSelected() {
+  const idxs = getSelected();
+  if (!idxs.length) { toast('Select at least one row', 'error'); return; }
+  for (const i of idxs) { await postPin(i); await delay(400); }
+  clearSel();
+}
+function updateBulk() {
+  const n = getSelected().length;
+  document.getElementById('bulk-bar').classList.toggle('on', n > 0);
+  document.getElementById('bulk-txt').textContent = n + ' row' + (n>1?'s':'') + ' selected';
+}
+function toggleAll(cb) { document.querySelectorAll('.rcb').forEach(c=>c.checked=cb.checked); updateBulk(); }
+function clearSel() { document.querySelectorAll('.rcb').forEach(c=>c.checked=false); document.getElementById('sel-all').checked=false; updateBulk(); }
+
+// ── MODAL ─────────────────────────────────────────────────────────────
+function openModal(i) {
+  const r = rows[i];
+  document.getElementById('m-title').textContent = r.title || 'Pin details';
+  const img = document.getElementById('m-img');
+  img.src = r.image_url||''; img.style.display = r.image_url?'block':'none';
+  document.getElementById('m-t').textContent = r.title||'—';
+  document.getElementById('m-d').textContent = r.description||'—';
+  document.getElementById('m-l').textContent = r.product_link||'—';
+  document.getElementById('m-u').textContent = r.image_url||'—';
+  document.getElementById('m-post').onclick = ()=>{ closeModal(); postPin(i); };
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModalBg(e) { if (e.target===document.getElementById('modal-overlay')) closeModal(); }
+
+// ── TOAST ─────────────────────────────────────────────────────────────
+function toast(msg, type='') {
+  const c = document.getElementById('toast-container');
+  const el = document.createElement('div');
+  el.className = 'toast'+(type?' toast-'+type:'');
+  el.textContent = msg; c.appendChild(el);
+  setTimeout(()=>el.remove(), 3500);
+}
+
+// ── UTILS ─────────────────────────────────────────────────────────────
+function h(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function trunc(s,n) { return s.length>n?s.slice(0,n)+'…':s; }
+function delay(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+loadConfig();
+</script>
 </body>
 </html>
