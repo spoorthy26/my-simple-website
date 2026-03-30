@@ -132,6 +132,24 @@
   .mf p { font-size: 13px; word-break: break-word; white-space: pre-wrap; }
   .divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
 
+
+  /* custom product section */
+  .custom-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; margin-bottom: 1.5rem; }
+  .custom-section h3 { font-family: 'Fraunces', serif; font-size: 0.95rem; font-weight: 600; margin-bottom: 0.75rem; display: flex; align-items: center; gap: 8px; }
+  .custom-section h3 span { font-size: 11px; font-family: 'DM Mono', monospace; font-weight: 400; color: var(--muted); background: var(--tag-bg); padding: 2px 8px; border-radius: 10px; }
+  .url-row { display: flex; gap: 8px; }
+  .url-row input { flex: 1; }
+  .url-queue { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .url-item { display: flex; align-items: center; gap: 8px; background: var(--tag-bg); border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12px; }
+  .url-item .url-text { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+  .url-item .url-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .url-status-pending  { background: var(--tag-bg); color: var(--muted); border: 1px solid var(--border-strong); }
+  .url-status-sending  { background: var(--warning-bg); color: var(--warning); }
+  .url-status-done     { background: var(--success-bg); color: var(--success); }
+  .url-status-error    { background: var(--red-pale); color: var(--red-dark); }
+  .url-remove { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 14px; padding: 0 2px; line-height: 1; }
+  .url-remove:hover { color: var(--red); }
+  .custom-webhook-note { font-size: 11px; color: var(--muted); margin-top: 8px; }
   footer { text-align: center; padding: 2rem; font-size: 11.5px; color: var(--muted); border-top: 1px solid var(--border); }
   footer a { color: var(--muted); text-decoration: none; margin: 0 8px; }
   footer a:hover { color: var(--text); }
@@ -212,6 +230,11 @@
         <input type="text" id="n8n-webhook" placeholder="https://n8n.srv1474936.hstgr.cloud/webhook/..." />
         <p class="hint">From your n8n Webhook node — copy the Production URL. The dashboard POSTs pin data directly to this URL when you click Post.</p>
       </div>
+      <div class="full">
+        <label class="lbl">Delay between bulk posts (seconds)</label>
+        <input type="text" id="post-delay" value="5" placeholder="5" />
+        <p class="hint">Wait time between each pin when posting multiple. Increase if your n8n workflow is slow (check Executions tab for run duration).</p>
+      </div>
 
       <div class="full" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
         <button class="btn btn-red" onclick="loadSheet()">Connect &amp; Load Sheet</button>
@@ -219,6 +242,19 @@
         <button class="btn btn-outline btn-sm" style="margin-left:auto;" onclick="toggle('config-card')">Collapse</button>
       </div>
     </div>
+  </div>
+
+
+  <!-- CUSTOM PRODUCT SECTION -->
+  <div class="custom-section">
+    <h3>Custom product <span>paste Amazon URL → send to n8n</span></h3>
+    <div class="url-row">
+      <input type="text" id="amazon-url-input" placeholder="https://www.amazon.in/dp/... or https://amzn.to/..." onkeydown="if(event.key==='Enter')addUrl()" />
+      <button class="btn btn-outline" onclick="addUrl()" style="white-space:nowrap;">+ Add URL</button>
+      <button class="btn btn-red" onclick="sendAllUrls()" style="white-space:nowrap;">Send to n8n →</button>
+    </div>
+    <div class="url-queue" id="url-queue"></div>
+    <p class="custom-webhook-note" id="custom-webhook-note"></p>
   </div>
 
   <!-- TABLE TOOLBAR -->
@@ -305,7 +341,7 @@
 let rows = [], statusMap = {}, activeFilter = 'pending';
 
 // ── CONFIG ────────────────────────────────────────────────────────────
-const LKEYS = ['google-api-key','sheet-id','sheet-range','col-map','has-header','n8n-webhook'];
+const LKEYS = ['google-api-key','sheet-id','sheet-range','col-map','has-header','n8n-webhook','post-delay'];
 function saveConfig() {
   LKEYS.forEach(k => {
     const el = document.getElementById(k);
@@ -349,8 +385,9 @@ async function loadSheet() {
     const data = await res.json();
     let vals = data.values || [];
     if (hasHdr && vals.length) vals = vals.slice(1);
+    const headerOffset = hasHdr ? 2 : 1;
     rows = vals.map((row, i) => {
-      const obj = { _idx: i };
+      const obj = { _idx: i, _sheet_row: i + headerOffset, _sheet_id: sheetId };
       colMap.forEach((f, ci) => { if (f) obj[f] = (row[ci] || '').trim(); });
       // Derive status from posted_status column
       const ps = (obj.posted_status || '').toLowerCase();
@@ -443,7 +480,9 @@ async function postPin(idx) {
     title:        r.title        || '',
     image_url:    r.image_url    || '',
     description:  r.description  || '',
-    product_link: r.product_link || ''
+    product_link: r.product_link || '',
+    sheet_row:    r._sheet_row,
+    sheet_id:     r._sheet_id
   };
 
   try {
@@ -491,8 +530,31 @@ function getSelected() { return [...document.querySelectorAll('.rcb:checked')].m
 async function postSelected() {
   const idxs = getSelected().filter(i => getStatus(i) !== 'done');
   if (!idxs.length) { toast('No pending rows selected', 'error'); return; }
-  for (const i of idxs) { await postPin(i); await delay(400); }
+  
+  toast(idxs.length + ' pins queued — posting one by one…', 'info');
   clearSel();
+
+  for (let qi = 0; qi < idxs.length; qi++) {
+    const i = idxs[qi];
+    // Update bulk bar to show progress
+    const remaining = idxs.length - qi;
+    document.getElementById('bulk-bar').classList.add('on');
+    document.getElementById('bulk-txt').textContent = `Posting ${qi+1} of ${idxs.length}…`;
+    
+    await postPin(i);         // wait for this post to fully complete (success or fail)
+    
+    if (qi < idxs.length - 1) {
+      // Show countdown before next post
+      const waitSecs = parseInt(cfg('post-delay') || localStorage.getItem('psc_post-delay') || '5', 10);
+      for (let s = waitSecs; s > 0; s--) {
+        document.getElementById('bulk-txt').textContent = `Posted ${qi+1} of ${idxs.length} — next in ${s}s…`;
+        await delay(1000);
+      }
+    }
+  }
+  
+  document.getElementById('bulk-bar').classList.remove('on');
+  toast('All ' + idxs.length + ' pins processed ✓', 'success');
 }
 function updateBulk() {
   const n = getSelected().length;
@@ -531,6 +593,124 @@ function toast(msg, type='') {
 function h(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function trunc(s,n) { return s.length>n?s.slice(0,n)+'…':s; }
 function delay(ms) { return new Promise(r=>setTimeout(r,ms)); }
+
+
+// ── CUSTOM PRODUCT URL SENDER ─────────────────────────────────────────
+let urlQueue = []; // [{url, status}]
+
+function addUrl() {
+  const input = document.getElementById('amazon-url-input');
+  const raw = input.value.trim();
+  if (!raw) return;
+
+  // Basic Amazon URL validation
+  const isAmazon = /amazon\.|amzn\.to|amzn\.in/i.test(raw);
+  if (!isAmazon) {
+    toast('Please paste a valid Amazon product URL', 'error');
+    return;
+  }
+
+  urlQueue.push({ url: raw, status: 'pending' });
+  input.value = '';
+  renderUrlQueue();
+}
+
+function removeUrl(idx) {
+  urlQueue.splice(idx, 1);
+  renderUrlQueue();
+}
+
+function renderUrlQueue() {
+  const el = document.getElementById('url-queue');
+  if (!urlQueue.length) { el.innerHTML = ''; return; }
+  el.innerHTML = urlQueue.map((item, i) => `
+    <div class="url-item" id="url-item-${i}">
+      <span class="url-text" title="${h(item.url)}">${h(truncUrl(item.url))}</span>
+      <span class="url-status url-status-${item.status}">${urlStatusLabel(item.status)}</span>
+      ${item.status === 'pending' ? `<button class="url-remove" onclick="removeUrl(${i})" title="Remove">✕</button>` : ''}
+    </div>`).join('');
+
+  const note = document.getElementById('custom-webhook-note');
+  const pending = urlQueue.filter(u => u.status === 'pending').length;
+  note.textContent = pending > 0 ? pending + ' URL' + (pending>1?'s':'') + ' ready to send — click "Send to n8n →"' : '';
+}
+
+function urlStatusLabel(s) {
+  return { pending: 'pending', sending: 'sending…', done: 'sent ✓', error: 'error ✕' }[s] || s;
+}
+
+function truncUrl(url) {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.slice(0, 40);
+    return u.hostname + path + (u.pathname.length > 40 ? '…' : '');
+  } catch { return url.slice(0, 55) + (url.length > 55 ? '…' : ''); }
+}
+
+async function sendAllUrls() {
+  const webhookUrl = cfg('n8n-webhook') || localStorage.getItem('psc_n8n-webhook');
+  if (!webhookUrl) {
+    toast('Set your n8n Webhook URL in ⚙ settings first', 'error');
+    document.getElementById('config-card').style.display = 'block';
+    return;
+  }
+
+  const pending = urlQueue.filter(u => u.status === 'pending');
+  if (!pending.length) {
+    toast('No URLs to send — add at least one Amazon URL', 'error');
+    return;
+  }
+
+  toast('Sending ' + pending.length + ' URL' + (pending.length>1?'s':'') + ' to n8n…', 'info');
+
+  for (let i = 0; i < urlQueue.length; i++) {
+    if (urlQueue[i].status !== 'pending') continue;
+
+    urlQueue[i].status = 'sending';
+    renderUrlQueue();
+
+    try {
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amazon_url:   urlQueue[i].url,
+          mode:         'custom_url',
+          sheet_row:    null,
+          sheet_id:     localStorage.getItem('psc_sheet-id') || ''
+        })
+      });
+
+      if (res.ok) {
+        urlQueue[i].status = 'done';
+        toast('Sent: ' + truncUrl(urlQueue[i].url), 'success');
+      } else {
+        throw new Error('HTTP ' + res.status);
+      }
+    } catch(e) {
+      urlQueue[i].status = 'error';
+      toast('Failed: ' + e.message, 'error');
+    }
+
+    renderUrlQueue();
+
+    // wait between sends if more URLs remain
+    if (i < urlQueue.length - 1) {
+      const waitSecs = parseInt(cfg('post-delay') || localStorage.getItem('psc_post-delay') || '5', 10);
+      for (let s = waitSecs; s > 0; s--) {
+        document.getElementById('custom-webhook-note').textContent = `Next URL in ${s}s…`;
+        await delay(1000);
+      }
+    }
+  }
+
+  document.getElementById('custom-webhook-note').textContent = 'All done! n8n is processing your products.';
+  // clear done items after 5s
+  setTimeout(() => {
+    urlQueue = urlQueue.filter(u => u.status !== 'done');
+    renderUrlQueue();
+  }, 5000);
+}
 
 loadConfig();
 </script>
