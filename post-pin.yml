@@ -25,15 +25,19 @@ jobs:
       - name: Post pin to Pinterest automation endpoint
         env:
           PINTEREST_ENDPOINT: ${{ secrets.PINTEREST_ENDPOINT }}
+          PIN_TITLE: ${{ inputs.title }}
+          PIN_IMAGE_URL: ${{ inputs.image_url }}
+          PIN_DESCRIPTION: ${{ inputs.description }}
+          PIN_PRODUCT_LINK: ${{ inputs.product_link }}
         run: |
-          echo "Posting pin: ${{ inputs.title }}"
+          echo "Posting pin: $PIN_TITLE"
 
-          PAYLOAD=$(printf '%s' '{
-            "title":        "${{ inputs.title }}",
-            "image_url":    "${{ inputs.image_url }}",
-            "description":  "${{ inputs.description }}",
-            "product_link": "${{ inputs.product_link }}"
-          }')
+          PAYLOAD=$(jq -n \
+            --arg title "$PIN_TITLE" \
+            --arg image_url "$PIN_IMAGE_URL" \
+            --arg description "$PIN_DESCRIPTION" \
+            --arg product_link "$PIN_PRODUCT_LINK" \
+            '{title: $title, image_url: $image_url, description: $description, product_link: $product_link}')
 
           HTTP_STATUS=$(curl -s -o /tmp/response.json -w "%{http_code}" \
             -X POST "$PINTEREST_ENDPOINT" \
