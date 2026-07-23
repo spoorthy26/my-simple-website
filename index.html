@@ -341,7 +341,7 @@
 let rows = [], statusMap = {}, activeFilter = 'pending';
 
 // ── CONFIG ────────────────────────────────────────────────────────────
-const LKEYS = ['google-api-key','sheet-id','sheet-range','col-map','has-header','n8n-webhook','post-delay'];
+const LKEYS = ['google-api-key','sheet-id','sheet-range','col-map','has-header','n8n-webhook','post-delay','gh-token','gh-repo'];
 function saveConfig() {
   LKEYS.forEach(k => {
     const el = document.getElementById(k);
@@ -465,43 +465,54 @@ function setError(m) { document.getElementById('tbody').innerHTML = `<tr><td col
 
 // ── POST PIN via n8n Webhook ──────────────────────────────────────────
 async function postPin(idx) {
-  const webhookUrl = cfg('n8n-webhook') || localStorage.getItem('psc_n8n-webhook');
-  if (!webhookUrl) {
-    toast('Add your n8n Webhook URL in settings', 'error');
+  const ghToken = cfg('gh-token') || localStorage.getItem('psc_gh-token');
+  const ghRepo  = cfg('gh-repo')  || localStorage.getItem('psc_gh-repo');
+  if (!ghToken || !ghRepo) {
+    toast('Add your GitHub token and repo in settings', 'error');
     document.getElementById('config-card').style.display = 'block';
     return;
   }
 
   const r = rows[idx];
   setRowStatus(idx, 'queued');
-  toast('Sending to n8n: ' + trunc(r.title||'pin', 28), 'info');
-
-  const payload = {
-    title:        r.title        || '',
-    image_url:    r.image_url    || '',
-    description:  r.description  || '',
-    product_link: r.product_link || '',
-    sheet_row:    r._sheet_row,
-    sheet_id:     r._sheet_id
-  };
+  toast('Triggering workflow for: ' + trunc(r.title||'pin', 28), 'info');
 
   try {
-    const res = await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (res.ok) {
-      setRowStatus(idx, 'done');
-      toast('Posted to Pinterest ✓', 'success');
-    } else {
-      let msg = 'HTTP ' + res.status;
-      try { const e = await res.json(); msg = e.message || msg; } catch(_) {}
-      throw new Error(msg);
-    }
+    await triggerWorkflow(r);
+    setRowStatus(idx, 'done');
+    toast('Workflow triggered ✓ (check Actions tab for result)', 'success');
   } catch(e) {
     setRowStatus(idx, 'error');
     toast('Failed: ' + e.message, 'error');
+  }
+}
+
+async function triggerWorkflow(inputs) {
+  const token = cfg('gh-token') || localStorage.getItem('psc_gh-token');
+  const repo  = cfg('gh-repo')  || localStorage.getItem('psc_gh-repo');
+  if (!token || !repo) throw new Error('Missing GitHub token or repo in settings');
+
+  const res = await fetch(`https://api.github.com/repos/${repo}/actions/workflows/post-pin.yml/dispatches`, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/vnd.github+json',
+      'Authorization': 'Bearer ' + token,
+      'X-GitHub-Api-Version': '2022-11-28'
+    },
+    body: JSON.stringify({
+      ref: 'main',
+      inputs: {
+        title:        inputs.title || '',
+        image_url:    inputs.image_url || '',
+        description:  inputs.description || '',
+        product_link: inputs.product_link || ''
+      }
+    })
+  });
+  if (res.status !== 204) {
+    let msg = 'HTTP ' + res.status;
+    try { const e = await res.json(); msg = e.message || msg; } catch(_) {}
+    throw new Error(msg);
   }
 }
 
